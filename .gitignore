@@ -1,0 +1,27 @@
+# Build outputs
+bin/
+obj/
+
+# Banco de dados SQLite gerado em runtime
+*.db
+*.db-shm
+*.db-wal
+
+# Arquivos de configuração com secrets — NUNCA commitar
+appsettings.Development.json
+appsettings.*.json
+!appsettings.json
+
+# User secrets do Visual Studio
+*.user
+.vs/
+
+# Ferramentas
+.idea/
+.vscode/
+
+# Pacotes NuGet restaurados
+.nuget/
+
+# Logs
+*.log

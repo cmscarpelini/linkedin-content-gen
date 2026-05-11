@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/ContentGen.Api/ContentGen.Api.csproj" />
+    <Project Path="src/ContentGen.Application/ContentGen.Application.csproj" />
+    <Project Path="src/ContentGen.Domain/ContentGen.Domain.csproj" />
+    <Project Path="src/ContentGen.Infrastructure/ContentGen.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/ContentGen.Tests/ContentGen.Tests.csproj" />
+  </Folder>
+</Solution>
