@@ -1,10 +1,12 @@
-# Architecture Spec – MVP v0.3
+# Architecture Spec – MVP v0.4
 
 ## 1. Visão Geral
 Arquitetura baseada em Clean Architecture, utilizando:
-- Minimal API
+- Minimal API (.NET 10)
 - EF Core + SQLite
-- Providers externos (RSS, HTML, IA)
+- Providers externos (RSS, HTML, IA via Groq/Llama)
+- Frontend React + Vite + TypeScript + Tailwind CSS
+- Documentação interativa via Scalar (`/scalar`)
 
 Camadas principais:
 - API
@@ -69,18 +71,30 @@ Campos:
 ## 5. Fluxo Arquitetural
 
 ### 1) GET /articles/search
-- Busca artigos
-- Salva no banco
-- Retorna lista
+- Busca fontes RSS configuradas em `appsettings.json` (`RssSources`, `RssMaxArticles`)
+- Persiste novos artigos no banco; reutiliza existentes pelo GUID
+- Retorna lista de `ArticleDto`
 
-### 2) POST /content/generate
-- Busca artigo
-- Extrai texto
-- IA gera conteúdo
-- Consolida
-- Retorna ReviewPackage
+### 2) GET /articles
+- Retorna todos os artigos salvos no banco
+- Inclui flag `hasContent` indicando se já há conteúdo gerado
+- Retorna lista de `SavedArticleDto`
 
-### 3) Usuário revisa manualmente
+### 3) POST /content/generate
+- Verifica se conteúdo já existe — se sim, retorna sem chamar a IA (idempotente)
+- Extrai HTML do artigo via `HtmlContentExtractor`
+- Chama IA duas vezes: PT-BR e EN-US
+- Persiste `ProcessedContent`
+- Retorna `ReviewPackage`
+
+### 4) GET /content
+- Retorna histórico de todo conteúdo gerado
+- Retorna lista de `ContentSummaryDto`
+
+### 5) GET /content/{articleId}
+- Retorna `ReviewPackage` completo para um artigo específico
+
+### 6) Usuário revisa manualmente via frontend
 
 ---
 
@@ -96,10 +110,13 @@ Campos:
 ---
 
 ## 7. Estrutura de Pastas
+```
 src/
-ContentGen.Api/
-ContentGen.Application/
-ContentGen.Domain/
-ContentGen.Infrastructure/
+  ContentGen.Api/          # Minimal API, endpoints, DI, Scalar
+  ContentGen.Application/  # Use cases, interfaces, DTOs
+  ContentGen.Domain/       # Entidades
+  ContentGen.Infrastructure/ # RSS, HTML, IA, EF Core, SQLite
+  ContentGen.Web/          # Frontend React + Vite + TypeScript + Tailwind
 tests/
-ContentGen.Tests/
+  ContentGen.Tests/
+```
