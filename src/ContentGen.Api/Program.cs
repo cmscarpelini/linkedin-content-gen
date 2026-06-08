@@ -1,3 +1,4 @@
+using ContentGen.Api;
 using ContentGen.Application.DTOs;
 using ContentGen.Application.Interfaces;
 using ContentGen.Application.UseCases;
@@ -8,6 +9,10 @@ using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Global error handling — maps exceptions to RFC 7807 ProblemDetails
+builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+builder.Services.AddProblemDetails();
 
 // CORS — permite o app React (porta 5173) chamar a API
 builder.Services.AddCors(opt => opt.AddPolicy("WebApp", policy =>
@@ -26,6 +31,7 @@ builder.Services.AddScoped<GenerateContentUseCase>();
 builder.Services.AddScoped<ListContentUseCase>();
 builder.Services.AddScoped<GetContentUseCase>();
 builder.Services.AddScoped<ListArticlesUseCase>();
+builder.Services.AddScoped<SetPostPublishedUseCase>();
 
 // Infrastructure
 builder.Services.AddScoped<IArticleProvider, RssArticleProvider>();
@@ -37,6 +43,9 @@ builder.Services.AddHttpClient<IContentExtractor, HtmlContentExtractor>();
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
+
+// Global exception handler — must run first so it wraps the whole pipeline
+app.UseExceptionHandler();
 
 // Apply migrations on startup
 using (var scope = app.Services.CreateScope())
@@ -73,17 +82,7 @@ app.MapGet("/articles", async (ListArticlesUseCase useCase, CancellationToken ct
 
 // POST /content/generate
 app.MapPost("/content/generate", async (GenerateContentRequest request, GenerateContentUseCase useCase, CancellationToken ct) =>
-{
-    try
-    {
-        var result = await useCase.ExecuteAsync(request.ArticleId, ct);
-        return Results.Ok(result);
-    }
-    catch (InvalidOperationException ex)
-    {
-        return Results.NotFound(new { error = ex.Message });
-    }
-})
+    Results.Ok(await useCase.ExecuteAsync(request.ArticleId, ct)))
 .WithName("GenerateContent")
 .WithSummary("Gera conteúdo técnico bilíngue (PT-BR e EN-US) para LinkedIn a partir de um artigo.");
 
@@ -101,6 +100,16 @@ app.MapGet("/content/{articleId:guid}", async (Guid articleId, GetContentUseCase
 })
 .WithName("GetContent")
 .WithSummary("Retorna o conteúdo gerado para um artigo específico.");
+
+// PUT /content/{articleId}/posts/{language}/{index}/published
+app.MapPut("/content/{articleId:guid}/posts/{language}/{index:int}/published",
+    async (Guid articleId, string language, int index, SetPostPublishedRequest request, SetPostPublishedUseCase useCase, CancellationToken ct) =>
+{
+    await useCase.ExecuteAsync(articleId, language, index, request.Published, ct);
+    return Results.NoContent();
+})
+.WithName("SetPostPublished")
+.WithSummary("Marca ou desmarca um post específico (idioma + índice) como publicado no LinkedIn.");
 
 app.Run();
 

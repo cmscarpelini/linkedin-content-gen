@@ -11,6 +11,7 @@ public class GetContentUseCase(IContentRepository repository)
         if (content is null) return null;
         var article = await repository.GetArticleByIdAsync(articleId, ct);
         if (article is null) return null;
-        return GenerateContentUseCase.BuildReviewPackage(article, content);
+        var publications = await repository.GetPublicationsByArticleIdAsync(articleId, ct);
+        return GenerateContentUseCase.BuildReviewPackage(article, content, publications);
     }
 }
