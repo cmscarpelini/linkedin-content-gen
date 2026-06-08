@@ -12,4 +12,9 @@ public interface IContentRepository
     Task<ProcessedContent?> GetProcessedContentByArticleIdAsync(Guid articleId, CancellationToken cancellationToken = default);
     Task<List<ProcessedContent>> GetAllProcessedContentAsync(CancellationToken cancellationToken = default);
     Task<List<(ArticleRawContent Article, bool HasContent)>> GetAllArticlesAsync(CancellationToken cancellationToken = default);
+
+    Task<List<PostPublication>> GetPublicationsByArticleIdAsync(Guid articleId, CancellationToken cancellationToken = default);
+    Task<PostPublication?> GetPublicationAsync(Guid articleId, string language, int postIndex, CancellationToken cancellationToken = default);
+    Task AddPublicationAsync(PostPublication publication, CancellationToken cancellationToken = default);
+    Task RemovePublicationAsync(PostPublication publication, CancellationToken cancellationToken = default);
 }

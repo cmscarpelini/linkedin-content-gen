@@ -9,13 +9,13 @@ public class ContentDbContext : DbContext
 
     public DbSet<ArticleRawContent> Articles => Set<ArticleRawContent>();
     public DbSet<ProcessedContent> ProcessedContents => Set<ProcessedContent>();
+    public DbSet<PostPublication> PostPublications => Set<PostPublication>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<ArticleRawContent>(e =>
         {
             e.HasKey(x => x.Id);
-            e.Property(x => x.RawHtml).HasColumnType("TEXT");
         });
 
         modelBuilder.Entity<ProcessedContent>(e =>
@@ -30,6 +30,13 @@ public class ContentDbContext : DbContext
             e.Property(x => x.PostSuggestionsPtBR).HasColumnType("TEXT");
             e.Property(x => x.InsightsEnUS).HasColumnType("TEXT");
             e.Property(x => x.PostSuggestionsEnUS).HasColumnType("TEXT");
+        });
+
+        modelBuilder.Entity<PostPublication>(e =>
+        {
+            e.HasKey(x => x.Id);
+            // One publication row per (article, language, post position).
+            e.HasIndex(x => new { x.ArticleId, x.Language, x.PostIndex }).IsUnique();
         });
     }
 }

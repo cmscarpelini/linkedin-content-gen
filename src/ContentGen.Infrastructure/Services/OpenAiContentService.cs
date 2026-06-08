@@ -1,11 +1,10 @@
 using System.ClientModel;
 using System.Globalization;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using ContentGen.Application.DTOs;
-using ContentGen.Application.Exceptions;
 using ContentGen.Application.Interfaces;
+using ContentGen.Application.Validation;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using OpenAI;
 using OpenAI.Chat;
 
@@ -14,19 +13,16 @@ namespace ContentGen.Infrastructure.Services;
 public class OpenAiContentService : IAiContentService
 {
     private readonly IPromptBuilder _promptBuilder;
+    private readonly ILogger<OpenAiContentService> _logger;
     private readonly ChatClient _chatClient;
     private readonly int _maxTokens;
     private readonly float _temperature;
+    private readonly int _maxRegenerationAttempts;
 
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNameCaseInsensitive = true,
-        Converters = { new JsonStringEnumConverter() }
-    };
-
-    public OpenAiContentService(IPromptBuilder promptBuilder, IConfiguration configuration)
+    public OpenAiContentService(IPromptBuilder promptBuilder, IConfiguration configuration, ILogger<OpenAiContentService> logger)
     {
         _promptBuilder = promptBuilder;
+        _logger = logger;
 
         var apiKey = configuration["OpenAI:ApiKey"]
             ?? throw new InvalidOperationException("OpenAI:ApiKey is not configured.");
@@ -34,6 +30,7 @@ public class OpenAiContentService : IAiContentService
 
         _maxTokens = int.TryParse(configuration["OpenAI:MaxTokens"], NumberStyles.Integer, CultureInfo.InvariantCulture, out var mt) ? mt : 4096;
         _temperature = float.TryParse(configuration["OpenAI:Temperature"], NumberStyles.Float, CultureInfo.InvariantCulture, out var temp) ? temp : 0.7f;
+        _maxRegenerationAttempts = int.TryParse(configuration["OpenAI:MaxRegenerationAttempts"], NumberStyles.Integer, CultureInfo.InvariantCulture, out var mr) ? mr : 2;
 
         var baseUrl = configuration["OpenAI:BaseUrl"] ?? "https://api.openai.com/v1";
         var clientOptions = new OpenAIClientOptions { Endpoint = new Uri(baseUrl) };
@@ -73,63 +70,42 @@ public class OpenAiContentService : IAiContentService
             new UserChatMessage(_promptBuilder.BuildUserPrompt(articleTitle, articleUrl, articleRawText, languageCode, languageName))
         };
 
-        var completion = await _chatClient.CompleteChatAsync(messages, options, cancellationToken);
-        var rawContent = completion.Value.Content[0].Text;
+        AiContentBlock? best = null;
+        var bestInRange = -1;
 
-        // Extract JSON block from the response (handles markdown code fences and plain JSON)
-        var jsonContent = ExtractJson(rawContent);
-        // Fix literal newlines inside JSON strings (model outputs real \n instead of \\n)
-        jsonContent = SanitizeJsonStrings(jsonContent);
-
-        try
+        for (var attempt = 0; ; attempt++)
         {
-            return JsonSerializer.Deserialize<AiContentBlock>(jsonContent, JsonOptions)
-                ?? throw new JsonException("Deserialized result was null.");
+            var completion = await _chatClient.CompleteChatAsync(messages, options, cancellationToken);
+            var rawContent = completion.Value.Content[0].Text;
+            var block = AiResponseParser.Parse(rawContent);
+
+            var issues = PostRules.FindIssues(block.PostSuggestions);
+            if (issues.Count == 0)
+                return block;
+
+            // Keep the attempt with the most posts inside the allowed range as a fallback.
+            var inRange = block.PostSuggestions.Count - issues.Count;
+            if (inRange > bestInRange)
+            {
+                bestInRange = inRange;
+                best = block;
+            }
+
+            if (attempt >= _maxRegenerationAttempts)
+            {
+                _logger.LogWarning(
+                    "{Language} content still has {IssueCount} post(s) outside {Min}-{Max} chars after {Attempts} attempt(s); returning best effort",
+                    languageCode, issues.Count, PostRules.MinLength, PostRules.MaxLength, attempt + 1);
+                return best!;
+            }
+
+            _logger.LogInformation(
+                "Regenerating {Language} posts (attempt {Attempt}): {IssueCount} post(s) outside the {Min}-{Max} char range",
+                languageCode, attempt + 2, issues.Count, PostRules.MinLength, PostRules.MaxLength);
+
+            // Continue the same conversation: echo the model's output, then ask it to fix the offenders.
+            messages.Add(new AssistantChatMessage(rawContent));
+            messages.Add(new UserChatMessage(_promptBuilder.BuildLengthCorrectionPrompt(issues, languageName)));
         }
-        catch (JsonException ex)
-        {
-            throw new AiResponseParseException(rawContent, ex);
-        }
-    }
-
-    private static string ExtractJson(string text)
-    {
-        // Try to extract from ```json ... ``` code fence
-        var fenceStart = text.IndexOf("```json", StringComparison.OrdinalIgnoreCase);
-        if (fenceStart >= 0)
-        {
-            var contentStart = text.IndexOf('\n', fenceStart) + 1;
-            var fenceEnd = text.IndexOf("```", contentStart, StringComparison.OrdinalIgnoreCase);
-            if (fenceEnd > contentStart)
-                return text[contentStart..fenceEnd].Trim();
-        }
-
-        // Fall back: extract from first { to last }
-        var jsonStart = text.IndexOf('{');
-        var jsonEnd = text.LastIndexOf('}');
-        if (jsonStart >= 0 && jsonEnd > jsonStart)
-            return text[jsonStart..(jsonEnd + 1)];
-
-        return text;
-    }
-
-    /// <summary>Escapes literal CR/LF inside JSON string values so the JSON is parseable.</summary>
-    private static string SanitizeJsonStrings(string json)
-    {
-        var sb = new System.Text.StringBuilder(json.Length);
-        bool inString = false;
-        bool escaped = false;
-
-        foreach (char c in json)
-        {
-            if (escaped) { sb.Append(c); escaped = false; continue; }
-            if (c == '\\' && inString) { escaped = true; sb.Append(c); continue; }
-            if (c == '"') { inString = !inString; sb.Append(c); continue; }
-            if (inString && c == '\n') { sb.Append("\\n"); continue; }
-            if (inString && c == '\r') { sb.Append("\\r"); continue; }
-            sb.Append(c);
-        }
-
-        return sb.ToString();
     }
 }

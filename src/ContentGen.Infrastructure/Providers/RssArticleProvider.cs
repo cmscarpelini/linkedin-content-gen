@@ -1,6 +1,7 @@
 using ContentGen.Application.Interfaces;
 using ContentGen.Domain.Entities;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using System.ServiceModel.Syndication;
 using System.Xml;
 
@@ -10,11 +11,13 @@ public class RssArticleProvider : IArticleProvider
 {
     private readonly string[] _sources;
     private readonly int _maxArticles;
+    private readonly ILogger<RssArticleProvider> _logger;
 
-    public RssArticleProvider(IConfiguration configuration)
+    public RssArticleProvider(IConfiguration configuration, ILogger<RssArticleProvider> logger)
     {
         _sources = configuration.GetSection("RssSources").Get<string[]>() ?? [];
         _maxArticles = configuration.GetValue<int>("RssMaxArticles", 5);
+        _logger = logger;
     }
 
     public async Task<IEnumerable<ArticleRawContent>> FetchArticlesAsync(CancellationToken cancellationToken = default)
@@ -28,9 +31,10 @@ public class RssArticleProvider : IArticleProvider
                 var items = await FetchFromRssAsync(source, cancellationToken);
                 articles.AddRange(items);
             }
-            catch
+            catch (Exception ex)
             {
-                // Fonte indisponível — continua com as demais
+                // Fonte indisponível — registra e continua com as demais
+                _logger.LogWarning(ex, "Failed to fetch RSS feed from {FeedUrl}; skipping this source", source);
             }
         }
 
@@ -52,7 +56,6 @@ public class RssArticleProvider : IArticleProvider
                 Title = item.Title.Text,
                 Url = item.Links.FirstOrDefault()?.Uri.ToString() ?? string.Empty,
                 Source = feedUrl,
-                RawHtml = string.Empty,
                 PublishedAt = item.PublishDate.UtcDateTime
             });
         }, cancellationToken);

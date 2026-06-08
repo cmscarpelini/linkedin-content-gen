@@ -1,10 +1,16 @@
 namespace ContentGen.Application.DTOs;
 
+public record PostDto(
+    int Index,
+    string Text,
+    bool Published
+);
+
 public record ContentBlockDto(
     string TechnicalSummary,
     List<string> Insights,
     string CasualExplanation,
-    List<string> PostSuggestions,
+    List<PostDto> PostSuggestions,
     string ConsolidatedText
 );
 

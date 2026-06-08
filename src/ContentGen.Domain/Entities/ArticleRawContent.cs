@@ -6,6 +6,5 @@ public class ArticleRawContent
     public string Title { get; set; } = string.Empty;
     public string Url { get; set; } = string.Empty;
     public string Source { get; set; } = string.Empty;
-    public string RawHtml { get; set; } = string.Empty;
     public DateTime PublishedAt { get; set; }
 }

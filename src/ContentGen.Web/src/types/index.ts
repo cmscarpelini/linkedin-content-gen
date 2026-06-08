@@ -22,11 +22,19 @@ export interface ContentSummary {
   createdAt: string;
 }
 
+export interface PostSuggestion {
+  index: number;
+  text: string;
+  published: boolean;
+}
+
+export type LanguageCode = "pt-BR" | "en-US";
+
 export interface ContentBlock {
   technicalSummary: string;
   insights: string[];
   casualExplanation: string;
-  postSuggestions: string[];
+  postSuggestions: PostSuggestion[];
   consolidatedText: string;
 }
 

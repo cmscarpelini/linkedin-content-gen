@@ -1,7 +1,9 @@
 using System.Text;
 using ContentGen.Application.DTOs;
+using ContentGen.Application.Exceptions;
 using ContentGen.Application.Interfaces;
 using ContentGen.Domain.Entities;
+using Microsoft.Extensions.Logging;
 using System.Text.Json;
 
 namespace ContentGen.Application.UseCases;
@@ -11,26 +13,35 @@ public class GenerateContentUseCase
     private readonly IContentRepository _repository;
     private readonly IContentExtractor _extractor;
     private readonly IAiContentService _aiService;
+    private readonly ILogger<GenerateContentUseCase> _logger;
 
     public GenerateContentUseCase(
         IContentRepository repository,
         IContentExtractor extractor,
-        IAiContentService aiService)
+        IAiContentService aiService,
+        ILogger<GenerateContentUseCase> logger)
     {
         _repository = repository;
         _extractor = extractor;
         _aiService = aiService;
+        _logger = logger;
     }
 
     public async Task<ReviewPackageDto> ExecuteAsync(Guid articleId, CancellationToken cancellationToken = default)
     {
         var article = await _repository.GetArticleByIdAsync(articleId, cancellationToken)
-            ?? throw new InvalidOperationException($"Article {articleId} not found.");
+            ?? throw new NotFoundException($"Article {articleId} not found.");
 
         // Return already-generated content without calling the AI again
         var existing = await _repository.GetProcessedContentByArticleIdAsync(articleId, cancellationToken);
         if (existing != null)
-            return BuildReviewPackage(article, existing);
+        {
+            _logger.LogInformation("Returning cached content for article {ArticleId}", articleId);
+            var publications = await _repository.GetPublicationsByArticleIdAsync(articleId, cancellationToken);
+            return BuildReviewPackage(article, existing, publications);
+        }
+
+        _logger.LogInformation("Generating content for article {ArticleId} ({ArticleUrl})", articleId, article.Url);
 
         var rawText = await _extractor.ExtractTextAsync(article.Url, cancellationToken);
 
@@ -52,17 +63,24 @@ public class GenerateContentUseCase
         };
 
         await _repository.SaveProcessedContentAsync(processed, cancellationToken);
+        _logger.LogInformation("Content generated and persisted for article {ArticleId}", articleId);
 
+        // Freshly generated content has no publications yet.
         return new ReviewPackageDto(
             article.Id,
             article.Title,
             article.Url,
-            BuildContentBlock(aiResponse.PtBR, "pt-BR"),
-            BuildContentBlock(aiResponse.EnUS, "en-US")
+            BuildContentBlock(aiResponse.PtBR, "pt-BR", NoPublishedPosts),
+            BuildContentBlock(aiResponse.EnUS, "en-US", NoPublishedPosts)
         );
     }
 
-    internal static ReviewPackageDto BuildReviewPackage(ArticleRawContent article, ProcessedContent p)
+    private static readonly HashSet<int> NoPublishedPosts = [];
+
+    internal static ReviewPackageDto BuildReviewPackage(
+        ArticleRawContent article,
+        ProcessedContent p,
+        IReadOnlyCollection<PostPublication> publications)
     {
         var ptBRBlock = new AiContentBlock(
             p.TechnicalSummaryPtBR,
@@ -76,11 +94,14 @@ public class GenerateContentUseCase
             JsonSerializer.Deserialize<List<string>>(p.PostSuggestionsEnUS) ?? []);
         return new ReviewPackageDto(
             article.Id, article.Title, article.Url,
-            BuildContentBlock(ptBRBlock, "pt-BR"),
-            BuildContentBlock(enUSBlock, "en-US"));
+            BuildContentBlock(ptBRBlock, "pt-BR", PublishedIndexes(publications, "pt-BR")),
+            BuildContentBlock(enUSBlock, "en-US", PublishedIndexes(publications, "en-US")));
     }
 
-    internal static ContentBlockDto BuildContentBlock(AiContentBlock block, string language)
+    private static HashSet<int> PublishedIndexes(IEnumerable<PostPublication> publications, string language)
+        => publications.Where(x => x.Language == language).Select(x => x.PostIndex).ToHashSet();
+
+    internal static ContentBlockDto BuildContentBlock(AiContentBlock block, string language, ISet<int> publishedIndexes)
     {
         var sb = new StringBuilder();
         bool isPtBR = language == "pt-BR";
@@ -103,11 +124,15 @@ public class GenerateContentUseCase
             sb.AppendLine(block.PostSuggestions[i]);
         }
 
+        var posts = block.PostSuggestions
+            .Select((text, i) => new PostDto(i, text, publishedIndexes.Contains(i)))
+            .ToList();
+
         return new ContentBlockDto(
             block.TechnicalSummary,
             block.Insights,
             block.CasualExplanation,
-            block.PostSuggestions,
+            posts,
             sb.ToString()
         );
     }

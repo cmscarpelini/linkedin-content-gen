@@ -1,9 +1,23 @@
 using ContentGen.Application.Interfaces;
+using ContentGen.Application.Validation;
 
 namespace ContentGen.Infrastructure.Services;
 
 public class PromptBuilder : IPromptBuilder
 {
+    // The three posts each take a distinct angle so the user gets varied content, not three rewrites
+    // of the same idea. Defined once and referenced by both the initial and the corrective prompts.
+    private const string PostAnglesBlock =
+        """
+        POST ANGLES (the three posts MUST each take a DIFFERENT angle — never repeat the same one):
+        - Post 1 — TECHNICAL DEEP-DIVE: precise and detailed, demonstrating hands-on expertise (architecture, trade-offs, gotchas, code-level reasoning).
+        - Post 2 — STORYTELLING / OPINION: a personal narrative or a strong, well-reasoned point of view that sparks discussion and feels human.
+        - Post 3 — PRACTICAL TAKEAWAY: what the reader can apply today, with concrete steps, a checklist or a quick win.
+        """;
+
+    private const string PostAnglesReminder =
+        "Preserve each post's distinct angle: Post 1 = technical deep-dive, Post 2 = storytelling/opinion, Post 3 = practical takeaway.";
+
     public string BuildSystemPrompt() =>
         """
         You are a technical content specialist for LinkedIn with deep expertise in the Microsoft ecosystem (.NET, Azure, C#).
@@ -30,6 +44,8 @@ public class PromptBuilder : IPromptBuilder
 
         4. POST SUGGESTIONS (exactly 3 LinkedIn posts).
 
+        {{PostAnglesBlock}}
+
         MANDATORY CHARACTER REQUIREMENT: Each post MUST contain at least 1,200 characters and no more than 1,800 characters.
         Count every character: letters, spaces, punctuation, line breaks, hashtags.
         If a post is shorter than 1,200 characters, it is INVALID. Expand with more context, examples, and developer scenarios until it reaches 1,200+ characters.
@@ -52,4 +68,21 @@ public class PromptBuilder : IPromptBuilder
           "postSuggestions": ["string with 1200-1800 chars", "string with 1200-1800 chars", "string with 1200-1800 chars"]
         }
         """;
+
+    public string BuildLengthCorrectionPrompt(IReadOnlyList<PostLengthIssue> issues, string languageName)
+    {
+        var lines = issues.Select(issue => issue.Problem == PostLengthProblem.TooShort
+            ? $"- Post {issue.Index + 1} has {issue.Length} characters — TOO SHORT. Expand it to between {PostRules.MinLength} and {PostRules.MaxLength} characters with more technical depth, concrete examples and real-world developer context."
+            : $"- Post {issue.Index + 1} has {issue.Length} characters — TOO LONG. Tighten it to between {PostRules.MinLength} and {PostRules.MaxLength} characters without losing the core message.");
+
+        return $"""
+        Your previous response did not meet the MANDATORY length requirement of {PostRules.MinLength}–{PostRules.MaxLength} characters per post:
+
+        {string.Join("\n", lines)}
+
+        Regenerate ALL THREE posts in {languageName}, fixing the issues above. Every post must land between {PostRules.MinLength} and {PostRules.MaxLength} characters (counting letters, spaces, punctuation, line breaks and hashtags).
+        {PostAnglesReminder}
+        Keep the exact same JSON schema as before. Return ONLY the JSON, no markdown, no explanation.
+        """;
+    }
 }

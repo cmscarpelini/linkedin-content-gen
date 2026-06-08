@@ -11,14 +11,14 @@ Permitir que um desenvolvedor gere conteúdo técnico curto e relevante baseado 
 - Busca em fontes RSS configuráveis via `appsettings.json` (array `RssSources`).
 - Limite configurável via `RssMaxArticles` (padrão: 5 artigos por chamada).
 - Fluxo totalmente síncrono realizado pelo usuário.
-- Artigos já conhecidos são reutilizados pelo GUID; novos são persistidos automaticamente.
+- Artigos já conhecidos são reutilizados pela URL; novos são persistidos automaticamente.
 
 ### 2.2 Processamento técnico
 Para cada artigo selecionado, gerar:
 - Mini‑resumo técnico (2–3 parágrafos)
 - 3 insights técnicos
 - Explicação casual (2–3 frases)
-- 3 sugestões de post (1.200–1.800 caracteres)
+- 3 sugestões de post (1.200–1.800 caracteres), cada uma com um **ângulo distinto**: (1) aprofundamento técnico, (2) storytelling/opinião, (3) lição prática aplicável
 - Todo o conteúdo é gerado em dois idiomas: PT-BR e EN-US, com qualidade equivalente em ambos.
 
 ### 2.3 Visualização e histórico
@@ -26,7 +26,8 @@ Para cada artigo selecionado, gerar:
 - **Buscar Artigos**: busca RSS e lista artigos disponíveis com botão "✨ Gerar".
 - **Artigos Salvos**: lista todos os artigos já gravados no banco, indicando quais já têm conteúdo gerado, com botões "✨ Gerar" ou "Ver Posts".
 - **Conteúdo Gerado**: lista histórico de todo conteúdo gerado, com link para detalhe.
-- **Detalhe do Conteúdo**: abas PT-BR / EN-US com resumo técnico, insights, explicação casual e posts com contador de caracteres e botão de copiar.
+- **Detalhe do Conteúdo**: abas PT-BR / EN-US com resumo técnico, insights, explicação casual e posts com contador de caracteres, botão de copiar e botão "marcar/desmarcar publicado" por post.
+- **Marcação de publicação**: cada post (idioma + posição) pode ser marcado como publicado no LinkedIn, ajudando o usuário a acompanhar o que já foi ao ar. Nada é publicado automaticamente — apenas o registro manual do status.
 
 ---
 
@@ -43,7 +44,7 @@ Para cada artigo selecionado, gerar:
 ## 4. Regras de Negócio
 1. Uma geração = 1 artigo.
 2. Conteúdo sempre inclui as quatro partes.
-3. Sugestões entre 1.200 e 1.800 caracteres (incluindo hashtags).
+3. Sugestões entre 1.200 e 1.800 caracteres (incluindo hashtags). O backend valida o tamanho e regenera automaticamente os posts fora da faixa (até `MaxRegenerationAttempts`, padrão 2); não convergindo, retorna o melhor resultado obtido.
 4. Cada post deve obrigatoriamente conter: hook na primeira linha, hashtags (3–5) ao final, e call-to-action ou pergunta de encerramento.
 5. Nada é publicado automaticamente.
 6. 100% sob demanda.
@@ -55,7 +56,7 @@ Para cada artigo selecionado, gerar:
 ### UC01 – Buscar artigos
 1. Usuário clica em "Buscar Artigos".
 2. Sistema consulta fontes RSS configuradas.
-3. Novos artigos são salvos no banco; existentes são reutilizados pelo GUID.
+3. Novos artigos são salvos no banco; existentes são reutilizados pela URL.
 4. Retorna lista com até `RssMaxArticles` artigos.
 
 ### UC02 – Listar artigos salvos
@@ -85,6 +86,11 @@ Para cada artigo selecionado, gerar:
 1. Usuário lê os posts gerados.
 2. Copia o texto de sua preferência.
 3. Cola e edita manualmente no LinkedIn antes de publicar.
+
+### UC07 – Marcar post como publicado
+1. Após publicar um post no LinkedIn, o usuário clica em "marcar publicado" naquele post.
+2. Sistema registra a publicação (idempotente) e o post passa a exibir o selo "✓ Publicado".
+3. O usuário pode desmarcar a qualquer momento.
 
 ---
 

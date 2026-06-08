@@ -1,7 +1,7 @@
 # Implementation Spec – MVP v0.2
 
 ## 1. Estrutura da Solution
-Conforme definido na Architecture Spec v0.3.
+Conforme definido na Architecture Spec v0.4.
 
 ---
 
@@ -20,7 +20,10 @@ Recebe `{ articleId }`. Se conteúdo já existir, retorna sem chamar a IA. Caso 
 Retorna histórico de todo conteúdo gerado. Retorna lista de `ContentSummaryDto`.
 
 ### GET /content/{articleId}
-Retorna `ReviewPackage` completo para o artigo especificado. Retorna 404 se não encontrado.
+Retorna `ReviewPackage` completo para o artigo especificado (cada post com flag `Published`). Retorna 404 se não encontrado.
+
+### PUT /content/{articleId}/posts/{language}/{index}/published
+Recebe `{ published: bool }`. Marca/desmarca um post como publicado (idempotente). Valida idioma e índice (`ValidationException` → 400) e existência de conteúdo (`NotFoundException` → 404). Retorna 204 No Content.
 
 ---
 
@@ -29,8 +32,10 @@ Retorna `ReviewPackage` completo para o artigo especificado. Retorna 404 se não
 - `SavedArticleDto` — Id, Title, Url, Source, PublishedAt, HasContent
 - `ContentSummaryDto` — ArticleId, ArticleTitle, ArticleUrl, CreatedAt
 - `GenerateContentRequest` — ArticleId
+- `SetPostPublishedRequest` — Published (bool)
 - `ReviewPackageDto` — ArticleId, ArticleTitle, ArticleUrl, PtBR: ContentBlockDto, EnUS: ContentBlockDto
-- `ContentBlockDto` — TechnicalSummary, Insights (List\<string\>), CasualExplanation, PostSuggestions (List\<string\>, 1.200–1.800 chars cada), ConsolidatedText (gerado on-demand)
+- `ContentBlockDto` — TechnicalSummary, Insights (List\<string\>), CasualExplanation, PostSuggestions (List\<`PostDto`\>), ConsolidatedText (gerado on-demand)
+- `PostDto` — Index, Text (1.200–1.800 chars), Published
 - `AiContentResponse` (interno) — desserialização por idioma: AiContentBlock
 - `AiContentBlock` (interno) — TechnicalSummary, Insights, CasualExplanation, PostSuggestions
 
@@ -40,7 +45,7 @@ Retorna `ReviewPackage` completo para o artigo especificado. Retorna 404 se não
 
 ### SearchArticlesUseCase
 - Busca artigos via RSS provider
-- Persiste novos; reutiliza existentes pelo GUID
+- Persiste novos; reutiliza existentes pela URL
 - Retorna lista de `ArticleDto`
 
 ### ListArticlesUseCase
@@ -60,8 +65,14 @@ Retorna `ReviewPackage` completo para o artigo especificado. Retorna 404 se não
 - Retorna lista de `ContentSummaryDto`
 
 ### GetContentUseCase
-- Busca `ProcessedContent` + `ArticleRawContent` por `articleId`
-- Retorna `ReviewPackage` ou `null`
+- Busca `ProcessedContent` + `ArticleRawContent` + `PostPublication`s por `articleId`
+- Retorna `ReviewPackage` (com flags `Published`) ou `null`
+
+### SetPostPublishedUseCase
+- Valida idioma (`pt-BR`/`en-US`) e índice do post (`ValidationException`)
+- Exige `ProcessedContent` existente (`NotFoundException`)
+- Idempotente: publicar adiciona `PostPublication`; despublicar remove; repetições são no-op
+- Normaliza o casing do idioma para forma canônica antes de persistir
 
 ---
 
@@ -77,6 +88,7 @@ Definidas em Application Layer:
 ## 6. Entidades
 - ArticleRawContent
 - ProcessedContent
+- PostPublication — (ArticleId, Language, PostIndex, PublishedAt); índice único em (ArticleId, Language, PostIndex)
 
 ---
 
@@ -92,15 +104,17 @@ EF Core + SQLite
 - `RssArticleProvider` — lê fontes de `RssSources` (array) e limite de `RssMaxArticles` via `IConfiguration`
 - `HtmlContentExtractor` — extrai texto via cascade de seletores CSS com HtmlAgilityPack
 - `OpenAiContentService`
-  - Lê `Model`, `MaxTokens`, `Temperature`, `ApiKey` e `BaseUrl` de `IConfiguration` (seção `OpenAI`)
+  - Lê `Model`, `MaxTokens`, `Temperature`, `ApiKey`, `BaseUrl` e `MaxRegenerationAttempts` de `IConfiguration` (seção `OpenAI`)
   - Compativel com qualquer provider OpenAI-compatible via `BaseUrl` (usado com Groq)
   - Faz duas chamadas separadas — uma por idioma — sem JSON mode
-  - `ExtractJson` parseia bloco de código markdown ou JSON bruto na resposta
-  - `SanitizeJsonStrings` escapa newlines literais dentro de strings JSON antes do parse
-  - Lança `AiResponseParseException` com conteúdo bruto em caso de falha
+  - **Validação + regeneração de tamanho**: após cada resposta, valida os posts via `PostRules.FindIssues`. Se algum estiver fora de 1.200–1.800 chars, continua a conversa enviando a resposta anterior + feedback corretivo (`BuildLengthCorrectionPrompt`) e regenera, até `MaxRegenerationAttempts` (padrão 2). Se não convergir, retorna o melhor resultado (mais posts dentro da faixa) e loga warning.
+  - Delega o parsing da resposta a `AiResponseParser.Parse` (extrai JSON de code fence/bruto, escapa newlines literais, lança `AiResponseParseException` com conteúdo bruto em caso de falha)
+- `AiResponseParser` (estático) — `Parse` / `ExtractJson` / `SanitizeJsonStrings`, extraído do serviço para isolar a lógica de parsing (SRP) e permitir testes unitários
+- `PostRules` (Application) — fonte única da regra de tamanho (`MinLength=1200`, `MaxLength=1800`), `IsWithinRange` e `FindIssues`
 - `PromptBuilder` (implementa `IPromptBuilder`)
   - `BuildSystemPrompt()` — prompt de sistema fixo com instruções de formato e tamanho
-  - `BuildUserPrompt(articleTitle, articleUrl, articleRawText, languageCode, languageName)` — gera prompt mono-idioma com schema JSON de saída esperado e requisito explícito de 1.200–1.800 chars por post
+  - `BuildUserPrompt(articleTitle, articleUrl, articleRawText, languageCode, languageName)` — gera prompt mono-idioma com schema JSON de saída esperado, requisito explícito de 1.200–1.800 chars por post e **3 ângulos distintos** por post (aprofundamento técnico / storytelling-opinião / lição prática)
+  - `BuildLengthCorrectionPrompt(issues, languageName)` — mensagem corretiva listando os posts fora da faixa (índice 1-based, tamanho atual) com instrução de expandir/encurtar e lembrete de preservar o ângulo de cada post
 
 ---
 
@@ -166,7 +180,8 @@ Post suggestions:
   "Model": "llama-3.3-70b-versatile",
   "MaxTokens": 8192,
   "Temperature": 0.7,
-  "BaseUrl": "https://api.groq.com/openai/v1"
+  "BaseUrl": "https://api.groq.com/openai/v1",
+  "MaxRegenerationAttempts": 2
 },
 "RssSources": [
   "https://devblogs.microsoft.com/dotnet/feed/",
@@ -196,7 +211,7 @@ Projeto React em `src/ContentGen.Web/`, criado com Vite + TypeScript. Configura�
 | `/` | `ArticlesPage` | Busca artigos RSS e exibe lista com botão "✨ Gerar" |
 | `/articles` | `SavedArticlesPage` | Lista artigos salvos no banco com status de conteúdo |
 | `/content` | `ContentListPage` | Histórico de todo conteúdo gerado |
-| `/content/:articleId` | `ContentDetailPage` | Detalhe com abas PT-BR / EN-US, posts com contador de chars e botão copiar |
+| `/content/:articleId` | `ContentDetailPage` | Detalhe com abas PT-BR / EN-US, posts com contador de chars, botão copiar e toggle "marcar publicado" por post |
 
 ### Estrutura
 ```

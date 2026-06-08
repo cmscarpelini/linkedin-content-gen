@@ -55,4 +55,25 @@ public class ContentRepository : IContentRepository
             .Select(a => (a, articleIdsWithContent.Contains(a.Id)))
             .ToList();
     }
+
+    public async Task<List<PostPublication>> GetPublicationsByArticleIdAsync(Guid articleId, CancellationToken cancellationToken = default)
+        => await _db.PostPublications
+            .Where(p => p.ArticleId == articleId)
+            .ToListAsync(cancellationToken);
+
+    public async Task<PostPublication?> GetPublicationAsync(Guid articleId, string language, int postIndex, CancellationToken cancellationToken = default)
+        => await _db.PostPublications
+            .FirstOrDefaultAsync(p => p.ArticleId == articleId && p.Language == language && p.PostIndex == postIndex, cancellationToken);
+
+    public async Task AddPublicationAsync(PostPublication publication, CancellationToken cancellationToken = default)
+    {
+        _db.PostPublications.Add(publication);
+        await _db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task RemovePublicationAsync(PostPublication publication, CancellationToken cancellationToken = default)
+    {
+        _db.PostPublications.Remove(publication);
+        await _db.SaveChangesAsync(cancellationToken);
+    }
 }
