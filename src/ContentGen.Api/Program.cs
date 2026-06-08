@@ -42,6 +42,9 @@ builder.Services.AddHttpClient<IContentExtractor, HtmlContentExtractor>();
 // OpenAPI
 builder.Services.AddOpenApi();
 
+// Health checks (liveness probe for containers / uptime monitors)
+builder.Services.AddHealthChecks();
+
 var app = builder.Build();
 
 // Global exception handler — must run first so it wraps the whole pipeline
@@ -64,6 +67,11 @@ app.UseCors("WebApp");
 
 if (!app.Environment.IsDevelopment())
     app.UseHttpsRedirection();
+
+// GET /health — liveness check
+app.MapHealthChecks("/health")
+    .WithName("HealthCheck")
+    .WithSummary("Liveness probe — retorna 200 quando a API está no ar.");
 
 // GET /articles/search
 app.MapGet("/articles/search", async (SearchArticlesUseCase useCase, CancellationToken ct) =>
