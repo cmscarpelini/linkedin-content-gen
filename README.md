@@ -131,6 +131,7 @@ npm run dev
 
 | Method | Route | Description |
 |--------|-------|-------------|
+| `GET` | `/health` | Liveness probe — returns `200` when the API is up |
 | `GET` | `/articles/search` | Fetch latest articles from RSS feeds |
 | `GET` | `/articles` | List all articles saved in the database |
 | `POST` | `/content/generate` | Generate bilingual content for an article |
