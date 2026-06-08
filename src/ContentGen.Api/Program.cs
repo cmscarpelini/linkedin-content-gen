@@ -101,9 +101,9 @@ app.MapGet("/content", async (ListContentUseCase useCase, CancellationToken ct) 
 .WithSummary("Lista todo o conteúdo já gerado.");
 
 // GET /content/count
-app.MapGet("/content/count", (ListContentUseCase useCase, CancellationToken ct) =>
+app.MapGet("/content/count", async (ListContentUseCase useCase, CancellationToken ct) =>
 {
-    var count = useCase.ExecuteAsync(ct).Result.Count;
+    var count = (await useCase.ExecuteAsync(ct)).Count;
     return Results.Ok(new { count });
 })
 .WithName("CountContent")
