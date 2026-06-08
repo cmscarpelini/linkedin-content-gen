@@ -118,6 +118,19 @@ app.MapGet("/content/{articleId:guid}", async (Guid articleId, GetContentUseCase
 .WithName("GetContent")
 .WithSummary("Retorna o conteúdo gerado para um artigo específico.");
 
+// GET /content/{articleId}/posts/{language}/{index}
+app.MapGet("/content/{articleId:guid}/posts/{language}/{index:int}", async (Guid articleId, string language, int index, GetContentUseCase useCase, CancellationToken ct) =>
+{
+    var pkg = await useCase.ExecuteAsync(articleId, ct);
+    if (pkg is null) return Results.NotFound();
+
+    var block = language == "pt-BR" ? pkg.PtBR : pkg.EnUS;
+    var post = block.PostSuggestions[index];
+    return Results.Ok(post);
+})
+.WithName("GetPost")
+.WithSummary("Retorna um post específico de um conteúdo gerado.");
+
 // PUT /content/{articleId}/posts/{language}/{index}/published
 app.MapPut("/content/{articleId:guid}/posts/{language}/{index:int}/published",
     async (Guid articleId, string language, int index, SetPostPublishedRequest request, SetPostPublishedUseCase useCase, CancellationToken ct) =>
