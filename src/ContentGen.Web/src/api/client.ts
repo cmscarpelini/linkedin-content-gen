@@ -1,4 +1,4 @@
-import type { ArticleSummary, SavedArticle, ContentSummary, ReviewPackage } from "../types";
+import type { ArticleSummary, SavedArticle, ContentSummary, ReviewPackage, LanguageCode } from "../types";
 
 const BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:5234";
 
@@ -8,6 +8,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
   });
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  if (res.status === 204) return undefined as T; // no body (e.g. publish toggle)
   return res.json() as Promise<T>;
 }
 
@@ -26,4 +27,10 @@ export const api = {
 
   getContent: (articleId: string) =>
     request<ReviewPackage>(`/content/${articleId}`),
+
+  setPostPublished: (articleId: string, language: LanguageCode, index: number, published: boolean) =>
+    request<void>(`/content/${articleId}/posts/${language}/${index}/published`, {
+      method: "PUT",
+      body: JSON.stringify({ published }),
+    }),
 };

@@ -16,7 +16,7 @@ export default function ArticlesPage() {
     try {
       const data = await api.searchArticles();
       setArticles(data);
-    } catch (e) {
+    } catch {
       setError("Erro ao buscar artigos. Verifique se a API está rodando.");
     } finally {
       setLoading(false);
@@ -29,7 +29,7 @@ export default function ArticlesPage() {
     try {
       const pkg = await api.generateContent(article.id);
       navigate(`/content/${pkg.articleId}`);
-    } catch (e) {
+    } catch {
       setError("Erro ao gerar conteúdo.");
     } finally {
       setGenerating(null);

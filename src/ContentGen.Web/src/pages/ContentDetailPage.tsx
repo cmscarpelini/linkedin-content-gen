@@ -1,33 +1,79 @@
 import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { api } from "../api/client";
-import type { ReviewPackage, ContentBlock } from "../types";
+import type { ReviewPackage, ContentBlock, PostSuggestion, LanguageCode } from "../types";
 
-function PostCard({ post, index }: { post: string; index: number }) {
+function PostCard({
+  post,
+  articleId,
+  language,
+  onToggle,
+}: {
+  post: PostSuggestion;
+  articleId: string;
+  language: LanguageCode;
+  onToggle: (index: number, published: boolean) => void;
+}) {
   const [copied, setCopied] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const withinRange = post.text.length >= 1200 && post.text.length <= 1800;
 
   async function handleCopy() {
-    await navigator.clipboard.writeText(post);
+    await navigator.clipboard.writeText(post.text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }
 
+  async function togglePublished() {
+    const next = !post.published;
+    setSaving(true);
+    try {
+      await api.setPostPublished(articleId, language, post.index, next);
+      onToggle(post.index, next);
+    } catch {
+      // keep current state on failure
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+    <div
+      className={`bg-white border rounded-xl p-4 shadow-sm ${
+        post.published ? "border-emerald-300 ring-1 ring-emerald-200" : "border-gray-200"
+      }`}
+    >
       <div className="flex items-center justify-between mb-2">
-        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-          Post #{index + 1}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+            Post #{post.index + 1}
+          </span>
+          {post.published && (
+            <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+              ✓ Publicado
+            </span>
+          )}
+        </div>
         <div className="flex items-center gap-3">
           <span
             className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-              post.length >= 1200 && post.length <= 1800
-                ? "bg-emerald-50 text-emerald-700"
-                : "bg-amber-50 text-amber-700"
+              withinRange ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"
             }`}
           >
-            {post.length} chars
+            {post.text.length} chars
           </span>
+          <button
+            onClick={togglePublished}
+            disabled={saving}
+            className={`text-xs px-3 py-1 rounded-lg font-medium transition-colors disabled:opacity-50 ${
+              post.published
+                ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+            }`}
+          >
+            {post.published ? "Desmarcar" : "Marcar publicado"}
+          </button>
           <button
             onClick={handleCopy}
             className="text-xs px-3 py-1 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 font-medium transition-colors"
@@ -36,12 +82,22 @@ function PostCard({ post, index }: { post: string; index: number }) {
           </button>
         </div>
       </div>
-      <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{post}</p>
+      <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{post.text}</p>
     </div>
   );
 }
 
-function ContentBlockView({ block }: { block: ContentBlock }) {
+function ContentBlockView({
+  block,
+  articleId,
+  language,
+  onTogglePost,
+}: {
+  block: ContentBlock;
+  articleId: string;
+  language: LanguageCode;
+  onTogglePost: (index: number, published: boolean) => void;
+}) {
   return (
     <div className="space-y-6">
       {/* Technical Summary */}
@@ -88,8 +144,14 @@ function ContentBlockView({ block }: { block: ContentBlock }) {
             Sugestões de Post LinkedIn
           </h3>
           <div className="space-y-4">
-            {block.postSuggestions.map((post, i) => (
-              <PostCard key={i} post={post} index={i} />
+            {block.postSuggestions.map((post) => (
+              <PostCard
+                key={post.index}
+                post={post}
+                articleId={articleId}
+                language={language}
+                onToggle={onTogglePost}
+              />
             ))}
           </div>
         </div>
@@ -123,7 +185,20 @@ export default function ContentDetailPage() {
     );
   if (!pkg) return null;
 
-  const activeBlock: ContentBlock = tab === "ptBR" ? pkg.ptBR : pkg.enUS;
+  const blockKey: "ptBR" | "enUS" = tab;
+  const languageCode: LanguageCode = tab === "ptBR" ? "pt-BR" : "en-US";
+  const activeBlock: ContentBlock = pkg[blockKey];
+
+  function handleTogglePost(index: number, published: boolean) {
+    setPkg((prev) => {
+      if (!prev) return prev;
+      const block = prev[blockKey];
+      const postSuggestions = block.postSuggestions.map((p) =>
+        p.index === index ? { ...p, published } : p
+      );
+      return { ...prev, [blockKey]: { ...block, postSuggestions } };
+    });
+  }
 
   return (
     <div>
@@ -163,7 +238,12 @@ export default function ContentDetailPage() {
         </button>
       </div>
 
-      <ContentBlockView block={activeBlock} />
+      <ContentBlockView
+        block={activeBlock}
+        articleId={pkg.articleId}
+        language={languageCode}
+        onTogglePost={handleTogglePost}
+      />
     </div>
   );
 }
