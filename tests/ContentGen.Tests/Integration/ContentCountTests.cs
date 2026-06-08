@@ -26,6 +26,7 @@ public class ContentCountTests
 
         var result = await client.GetFromJsonAsync<CountResponse>("/content/count");
 
-        Assert.Equal(1, result!.Count);
+        Assert.NotNull(result);
+        Assert.Equal(1, result.Count);
     }
 }
