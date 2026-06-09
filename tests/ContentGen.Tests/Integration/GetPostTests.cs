@@ -31,4 +31,42 @@ public class GetPostTests
         Assert.Equal(0, post.Index);
         Assert.Equal("Post 1 PT", post.Text);
     }
+
+    [Fact]
+    public async Task GetPost_WhenIndexOutOfRange_ReturnsNotFound()
+    {
+        using var factory = new ContentGenApiFactory();
+        var article = Fakes.Article();
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ContentDbContext>();
+            db.Articles.Add(article);
+            await db.SaveChangesAsync();
+        }
+        var client = factory.CreateClient();
+        await client.PostAsJsonAsync("/content/generate", new { articleId = article.Id });
+
+        var response = await client.GetAsync($"/content/{article.Id}/posts/pt-BR/9");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetPost_WhenLanguageUnsupported_ReturnsBadRequest()
+    {
+        using var factory = new ContentGenApiFactory();
+        var article = Fakes.Article();
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ContentDbContext>();
+            db.Articles.Add(article);
+            await db.SaveChangesAsync();
+        }
+        var client = factory.CreateClient();
+        await client.PostAsJsonAsync("/content/generate", new { articleId = article.Id });
+
+        var response = await client.GetAsync($"/content/{article.Id}/posts/fr-FR/0");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
 }

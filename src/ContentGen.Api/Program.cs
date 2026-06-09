@@ -1,5 +1,6 @@
 using ContentGen.Api;
 using ContentGen.Application.DTOs;
+using ContentGen.Application.Exceptions;
 using ContentGen.Application.Interfaces;
 using ContentGen.Application.UseCases;
 using ContentGen.Infrastructure.Persistence;
@@ -121,17 +122,19 @@ app.MapGet("/content/{articleId:guid}", async (Guid articleId, GetContentUseCase
 // GET /content/{articleId}/posts/{language}/{index}
 app.MapGet("/content/{articleId:guid}/posts/{language}/{index:int}", async (Guid articleId, string language, int index, GetContentUseCase useCase, CancellationToken ct) =>
 {
+    var isPtBr = string.Equals(language, "pt-BR", StringComparison.OrdinalIgnoreCase);
+    var isEnUs = string.Equals(language, "en-US", StringComparison.OrdinalIgnoreCase);
+    if (!isPtBr && !isEnUs)
+        throw new ValidationException($"Language '{language}' is not supported. Use 'pt-BR' or 'en-US'.");
+
     var pkg = await useCase.ExecuteAsync(articleId, ct);
     if (pkg is null) return Results.NotFound();
 
-    var block = language == "pt-BR" ? pkg.PtBR : pkg.EnUS;
+    var block = isPtBr ? pkg.PtBR : pkg.EnUS;
+    if (index < 0 || index >= block.PostSuggestions.Count)
+        return Results.NotFound();
 
-    // validate the requested index
-    if (index < 0)
-        return Results.BadRequest("Invalid index.");
-
-    var post = block.PostSuggestions[index];
-    return Results.Ok(post);
+    return Results.Ok(block.PostSuggestions[index]);
 })
 .WithName("GetPost")
 .WithSummary("Retorna um post específico de um conteúdo gerado.");
