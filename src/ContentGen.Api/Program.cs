@@ -125,6 +125,11 @@ app.MapGet("/content/{articleId:guid}/posts/{language}/{index:int}", async (Guid
     if (pkg is null) return Results.NotFound();
 
     var block = language == "pt-BR" ? pkg.PtBR : pkg.EnUS;
+
+    // validate the requested index
+    if (index < 0)
+        return Results.BadRequest("Invalid index.");
+
     var post = block.PostSuggestions[index];
     return Results.Ok(post);
 })
