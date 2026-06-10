@@ -27,3 +27,6 @@ appsettings.*.json
 
 # Logs
 *.log
+
+# Variáveis de ambiente do docker-compose (contém secrets) — usar .env.example como referência
+/.env

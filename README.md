@@ -71,7 +71,25 @@ tests/
 
 ---
 
-## Getting Started
+## Run with Docker (recommended)
+
+The whole stack (API + frontend) runs with a single command:
+
+```bash
+# Provide your Groq API key
+cp .env.example .env          # then edit .env and set OPENAI_API_KEY
+
+docker compose up --build
+```
+
+- Frontend → http://localhost:5173
+- API → http://localhost:5234 (health check at `/health`)
+
+The SQLite database is persisted in a named volume (`contentgen-data`), and the frontend only starts once the API reports healthy. Stop with `docker compose down` (add `-v` to also drop the database volume).
+
+---
+
+## Getting Started (without Docker)
 
 ### Prerequisites
 
