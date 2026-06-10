@@ -56,6 +56,18 @@ This tool automates the pipeline:
 
 ---
 
+## Screenshots
+
+> 📸 Screenshots and a short demo GIF live in [`docs/screenshots/`](docs/screenshots/). Capture the app (e.g. via `docker compose up`), drop the images there, and uncomment the references below.
+
+<!--
+![Search articles](docs/screenshots/articles.png)
+![Generated content — PT-BR / EN-US tabs](docs/screenshots/content-detail.png)
+![Mark a post as published](docs/screenshots/published.png)
+-->
+
+---
+
 ## Project Structure
 
 ```
@@ -67,6 +79,66 @@ src/
   ContentGen.Web/           # React frontend
 tests/
   ContentGen.Tests/
+```
+
+---
+
+## Architecture
+
+Clean Architecture: dependencies point **inward**. The API and Infrastructure depend on Application; Application depends only on Domain. Infrastructure implements the Application's interfaces (ports), so external concerns (RSS, HTTP, the AI provider, EF Core) stay swappable and out of the core.
+
+```mermaid
+flowchart TD
+    subgraph API["API · ContentGen.Api"]
+        EP["Minimal API endpoints<br/>GlobalExceptionHandler · Scalar docs"]
+    end
+    subgraph APP["Application · ContentGen.Application"]
+        UC["Use Cases"]
+        PORTS["Interfaces / ports<br/>IArticleProvider · IContentExtractor<br/>IAiContentService · IContentRepository · IPromptBuilder"]
+        RULES["DTOs · PostRules · Exceptions"]
+    end
+    subgraph INFRA["Infrastructure · ContentGen.Infrastructure"]
+        ADAPT["RssArticleProvider · HtmlContentExtractor<br/>OpenAiContentService · AiResponseParser · PromptBuilder<br/>ContentRepository (EF Core + SQLite)"]
+    end
+    subgraph DOMAIN["Domain · ContentGen.Domain"]
+        ENT["Entities<br/>ArticleRawContent · ProcessedContent · PostPublication"]
+    end
+
+    API --> APP
+    APP --> DOMAIN
+    INFRA --> APP
+    INFRA --> DOMAIN
+    ADAPT -. implements .-> PORTS
+```
+
+### Content generation flow
+
+```mermaid
+sequenceDiagram
+    actor Dev as Developer
+    participant Web as React UI
+    participant API as API
+    participant UC as GenerateContentUseCase
+    participant Ext as HtmlContentExtractor
+    participant AI as Groq · Llama 3.3 70B
+    participant DB as SQLite
+
+    Dev->>Web: Click "Generate"
+    Web->>API: POST /content/generate
+    API->>UC: ExecuteAsync(articleId)
+    UC->>DB: content already generated?
+    alt Cached
+        DB-->>UC: ProcessedContent
+    else New
+        UC->>Ext: extract article text
+        Ext-->>UC: cleaned text
+        UC->>AI: generate PT-BR & EN-US
+        Note over UC,AI: enforces 1,200–1,800 chars,<br/>regenerates posts out of range
+        AI-->>UC: posts (3 distinct angles)
+        UC->>DB: persist ProcessedContent
+    end
+    UC-->>API: ReviewPackage (PT-BR + EN-US)
+    API-->>Web: posts ready to review & copy
 ```
 
 ---
