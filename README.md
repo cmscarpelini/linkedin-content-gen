@@ -58,13 +58,21 @@ This tool automates the pipeline:
 
 ## Screenshots
 
-> 📸 Screenshots and a short demo GIF live in [`docs/screenshots/`](docs/screenshots/). Capture the app (e.g. via `docker compose up`), drop the images there, and uncomment the references below.
+### Demo
 
-<!--
+![End-to-end demo: search → generate → copy](docs/screenshots/demo.gif)
+
+### Search articles
+
 ![Search articles](docs/screenshots/articles.png)
+
+### Generated content — PT-BR / EN-US tabs
+
 ![Generated content — PT-BR / EN-US tabs](docs/screenshots/content-detail.png)
+
+### Mark a post as published
+
 ![Mark a post as published](docs/screenshots/published.png)
--->
 
 ---
 

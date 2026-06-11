@@ -12,3 +12,11 @@ Run the app first (`docker compose up --build`, then open http://localhost:5173)
 | `demo.gif` | Short end-to-end flow: search → generate → copy |
 
 Keep images optimized (PNG/WebP, under ~500 KB each); GIFs short (a few seconds).
+
+The `demo.gif` was produced from a screen recording with ffmpeg:
+
+```bash
+ffmpeg -i demo.mp4 -filter_complex \
+  "fps=12,scale=960:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=128[p];[s1][p]paletteuse=dither=bayer:bayer_scale=3" \
+  demo.gif
+```
