@@ -13,6 +13,12 @@ services:
     environment:
       # Empty by default so the API still starts (the key is only needed when generating content)
       OpenAI__ApiKey: ${OPENAI_API_KEY:-}
+      # Default to Groq (Llama 3.3 70B) for the demo. appsettings.json defaults to OpenAI,
+      # but appsettings.Development.json (with the Groq config) is not used in the container,
+      # so the provider must be set here. Override any of these in .env to use another provider.
+      OpenAI__BaseUrl: ${OPENAI_BASE_URL:-https://api.groq.com/openai/v1}
+      OpenAI__Model: ${OPENAI_MODEL:-llama-3.3-70b-versatile}
+      OpenAI__MaxTokens: ${OPENAI_MAX_TOKENS:-8192}
     volumes:
       - contentgen-data:/app/data
     restart: unless-stopped
