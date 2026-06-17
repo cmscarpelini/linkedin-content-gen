@@ -1,73 +1,64 @@
-# React + TypeScript + Vite
+# ContentGen — Web
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React + TypeScript frontend for **ContentGen**, the AI-powered LinkedIn content
+generator. It talks to the [ContentGen API](../ContentGen.Api) to search articles,
+trigger bilingual content generation, and review/copy the generated posts.
 
-Currently, two official plugins are available:
+> For the full project overview, architecture, and Docker setup, see the
+> [root README](../../README.md).
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Stack
 
-## React Compiler
+- **React 19** + **TypeScript**
+- **Vite 8** (dev server + build)
+- **Tailwind CSS v3**
+- **react-router-dom v7**
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Getting started
 
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+# from src/ContentGen.Web
+cp .env.example .env.local      # set VITE_API_BASE_URL (default: http://localhost:5234)
+npm install
+npm run dev                     # http://localhost:5173
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+The API must be running for the app to do anything useful — start it with
+`dotnet run --project ../ContentGen.Api --launch-profile http`, or bring up the whole
+stack with `docker compose up --build` from the repo root.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Scripts
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+| Command | Description |
+|---|---|
+| `npm run dev` | Start the Vite dev server with HMR |
+| `npm run build` | Type-check (`tsc -b`) and build for production |
+| `npm run lint` | Run ESLint (CI fails on errors) |
+| `npm run preview` | Serve the production build locally |
+
+## Structure
+
 ```
+src/
+  api/client.ts     # fetch wrappers for every API endpoint
+  types/index.ts    # shared TypeScript interfaces
+  pages/            # ArticlesPage, SavedArticlesPage, ContentListPage, ContentDetailPage
+  App.tsx           # BrowserRouter + sidebar + routes
+  main.tsx          # entry point
+```
+
+## Pages
+
+| Route | Component | Description |
+|---|---|---|
+| `/` | `ArticlesPage` | Search RSS articles and trigger generation |
+| `/articles` | `SavedArticlesPage` | Articles saved in the DB, with content status |
+| `/content` | `ContentListPage` | History of all generated content |
+| `/content/:articleId` | `ContentDetailPage` | PT-BR / EN-US tabs, per-post char count, copy button, and "mark as published" toggle |
+
+## Configuration
+
+`VITE_API_BASE_URL` points the client at the API. In dev it lives in `.env.local`
+(gitignored — use `.env.example` as the template). In the Docker image it's a **build
+arg** baked into the bundle at build time (see [`Dockerfile`](Dockerfile) and the root
+`docker-compose.yml`).
